@@ -1,12 +1,19 @@
 import random
 import json
 import binascii
-import aiohttp
+from urllib.parse import urlparse
 
+from .client_transaction import ClientTransaction
 from ..models import AccountInfo
 from ..utils import get_proxy_url, handle_aio_response, async_retry, get_conn
 from ..config import DISABLE_SSL
+from ..tls import TLSClient
 from ..vars import USER_AGENT, SEC_CH_UA, SEC_CH_UA_PLATFORM
+
+
+class UserNotFound(Exception):
+    def __init__(self):
+        super().__init__('User not found')
 
 
 def generate_csrf_token(size=16):
@@ -14,7 +21,7 @@ def generate_csrf_token(size=16):
     return binascii.hexlify(data).decode()
 
 
-def _get_headers(info: AccountInfo) -> dict:
+def _get_headers() -> dict:
     # if is_empty(info.user_agent):
     #     info.user_agent = USER_AGENT
     #     info.sec_ch_ua = SEC_CH_UA
@@ -42,100 +49,99 @@ def _get_headers(info: AccountInfo) -> dict:
 
 class Twitter:
 
+    COOKIES_DOMAIN = '.x.com'
+
     def __init__(self, account_info: AccountInfo):
         self.account = account_info
-        self.cookies = {
-            'auth_token': account_info.twitter_auth_token,
-            'ct0': self.account.twitter_ct0,
-        }
-        self.headers = _get_headers(account_info)
         self.proxy = get_proxy_url(account_info.proxy)
         self.my_user_id = None
         self.my_username = None
+        self.tls = TLSClient(self.account, _get_headers(), debug=True)
+        self.client_transaction = ClientTransaction()
 
     async def start(self):
+        await self.client_transaction.init(self.tls)
+        self.set_cookies({'auth_token': self.account.twitter_auth_token})
         ct0 = self.account.twitter_ct0
         if ct0 == '':
             ct0 = await self._get_ct0()
             self.account.twitter_ct0 = ct0
-        self.cookies.update({'ct0': ct0})
-        self.headers.update({'x-csrf-token': ct0})
+        self.set_cookies({'ct0': ct0})
+        self.tls.update_headers({'x-csrf-token': ct0})
         self.my_username = await self.get_my_profile_info()
         self.my_user_id = await self.get_user_id(self.my_username)
 
-    def set_cookies(self, resp_cookies):
-        self.cookies.update({name: value.value for name, value in resp_cookies.items()})
+    def set_cookies(self, cookies):
+        for name, value in cookies.items():
+            self.tls.sess.cookies.set(name, value, self.COOKIES_DOMAIN)
 
-    @async_retry
-    async def request(self, method, url, acceptable_statuses=None, resp_handler=None, with_text=False, **kwargs):
-        headers = self.headers.copy()
-        cookies = self.cookies.copy()
-        if 'headers' in kwargs:
-            headers.update(kwargs.pop('headers'))
-        if 'cookies' in kwargs:
-            cookies.update(kwargs.pop('cookies'))
-        if DISABLE_SSL:
-            kwargs.update({'ssl': False})
+    async def request(self, method, url, resp_handler=None, **kwargs):
         try:
-            async with aiohttp.ClientSession(connector=get_conn(self.proxy), headers=headers, cookies=cookies) as sess:
-                if method.lower() == 'get':
-                    async with sess.get(url, **kwargs) as resp:
-                        self.set_cookies(resp.cookies)
-                        return await handle_aio_response(resp, acceptable_statuses, resp_handler, with_text)
-                elif method.lower() == 'post':
-                    async with sess.post(url, **kwargs) as resp:
-                        self.set_cookies(resp.cookies)
-                        return await handle_aio_response(resp, acceptable_statuses, resp_handler, with_text)
-                else:
-                    raise Exception('Wrong request method')
+            tx_id = self.client_transaction.generate_transaction_id(method, urlparse(url).path)
+            headers = {'X-Client-Transaction-Id': tx_id}
+            if 'headers' in kwargs:
+                headers.update(kwargs.pop('headers'))
+            resp_handler = self.get_check_errors_resp_handler(resp_handler)
+            return await self.tls.request(method, url, headers=headers, resp_handler=resp_handler, **kwargs)
         except Exception as e:
             self.account.twitter_error = True
             raise e
 
     async def _get_ct0(self):
         try:
-            kwargs = {'ssl': False} if DISABLE_SSL else {}
-            async with aiohttp.ClientSession(connector=get_conn(self.proxy),
-                                             headers=self.headers, cookies=self.cookies) as sess:
-                async with sess.get('https://api.x.com/1.1/account/settings.json', **kwargs) as resp:
-                    new_csrf = resp.cookies.get("ct0")
-                    if new_csrf is None:
-                        raise Exception('Empty new csrf. Probably bad auth token')
-                    new_csrf = new_csrf.value
-                    return new_csrf
+            await self.tls.get('https://api.x.com/1.1/account/settings.json', raw=True)
+            return self.tls.sess.cookies.get('ct0', self.account.twitter_ct0, self.COOKIES_DOMAIN)
         except Exception as e:
             reason = 'Your account has been locked\n' if 'Your account has been locked' in str(e) else ''
             self.account.twitter_error = True
             raise Exception(f'Failed to get ct0 for twitter: {reason}{str(e)}')
 
-    def check_response_errors(self, resp):
+    def get_check_errors_resp_handler(self, resp_handler):
+        check = self.check_response_errors
+        return lambda resp: check(resp) if resp_handler is None else resp_handler(check(resp))
+
+    @classmethod
+    def check_response_errors(cls, resp):
         if type(resp) is not dict:
-            return
+            return resp
         errors = resp.get('errors', [])
         if type(errors) is not list:
-            return
+            return resp
         if len(errors) == 0:
-            return
-        error_msg = ' | '.join([msg for msg in [err.get('message') for err in errors if type(err) is dict] if msg])
+            return resp
+        msgs = [msg for msg in [f"{err.get('message')} (code={err.get('code')})"
+                                for err in errors if type(err) is dict] if msg]
+        msgs = list(set(msgs))
+        error_msg = ' | '.join(msgs)
         if len(error_msg) == 0:
-            return
+            return resp
         raise Exception(error_msg)
 
     async def get_my_profile_info(self):
-        url = 'https://api.x.com/1.1/account/settings.json'
+        url = 'https://api.x.com/graphql/UhddhjWCl-JMqeiG4vPtvw/Viewer'
+        features = {
+            "rweb_tipjar_consumption_enabled": True,
+            "responsive_web_graphql_exclude_directive_enabled": True,
+            "verified_phone_label_enabled": False,
+            "creator_subscriptions_tweet_preview_api_enabled": True,
+            "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+            "responsive_web_graphql_timeline_navigation_enabled": True,
+        }
+        field_toggles = {
+            "isDelegate": False,
+            "withAuxiliaryUserLabels": False,
+        }
+        variables = {"withCommunitiesMemberships": True}
         params = {
-            'include_mention_filter': 'true',
-            'include_nsfw_user_flag': 'true',
-            'include_nsfw_admin_flag': 'true',
-            'include_ranked_timeline': 'true',
-            'include_alt_text_compose': 'true',
-            'ext': 'ssoConnections',
-            'include_country_code': 'true',
-            'include_ext_dm_nsfw_media_filter': 'true',
-            'include_ext_sharing_audiospaces_listening_data_with_followers': 'true',
+            "features": features,
+            "fieldToggles": field_toggles,
+            "variables": variables,
         }
         try:
-            return await self.request("GET", url, params=params, resp_handler=lambda r: r['screen_name'].lower())
+            return await self.request(
+                "GET", url, params=params,
+                resp_handler=lambda r: r['data']['viewer']['user_results']['result']['legacy']['screen_name'],
+            )
         except Exception as e:
             raise Exception(f'Get my username error: {str(e)}')
 
@@ -166,18 +172,21 @@ class Twitter:
             raise Exception(f'Get followers count error: {str(e)}')
 
     async def get_user_id(self, username):
-        url = 'https://x.com/i/api/graphql/9zwVLJ48lmVUk8u_Gh9DmA/ProfileSpotlightsQuery'
+        url = 'https://x.com/i/api/graphql/-0XdHI-mrHWBQd8-oLo1aA/ProfileSpotlightsQuery'
         if username[0] == '@':
             username = username[1:]
         username = username.lower()
         params = {
             'variables': to_json({'screen_name': username})
         }
+
+        def _handler(resp):
+            if type(resp) is dict and len(resp.get('data', {})) == 0:
+                raise UserNotFound()
+            return int(resp['data']['user_result_by_screen_name']['result']['rest_id'])
+
         try:
-            return await self.request(
-                "GET", url, params=params,
-                resp_handler=lambda r: int(r['data']['user_result_by_screen_name']['result']['rest_id'])
-            )
+            return await self.request("GET", url, params=params, resp_handler=_handler)
         except Exception as e:
             raise Exception(f'Get user id error: {str(e)}')
 
@@ -210,7 +219,7 @@ class Twitter:
 
     async def post_tweet(self, text, tweet_id=None) -> str:
         action = "CreateTweet"
-        query_id = "oB-5XsHNAbjvARJEc8CZFw"
+        query_id = "xT36w0XM3A8jDynpkram2A"
         _json = dict(
             variables=dict(
                 tweet_text=text,
@@ -282,7 +291,6 @@ class Twitter:
         }
         try:
             resp = await self.request('POST', url, json=_json, resp_handler=lambda r: r)
-            self.check_response_errors(resp)
             return resp
         except Exception as e:
             raise Exception(f'Retweet error: {str(e)}')
@@ -308,7 +316,7 @@ class Twitter:
 
     async def find_posted_tweet(self, text_condition_func, count=20) -> str:
         action = "UserTweets"
-        query_id = "V1ze5q3ijDS1VeLwLY0m7g"
+        query_id = "E3opETHurmVJflFsUBVuUQ"
         params = {
             'variables': to_json({
                 "userId": self.my_user_id,
@@ -319,26 +327,33 @@ class Twitter:
                 "withV2Timeline": True,
             }),
             'features': to_json({
+                "profile_label_improvements_pcf_label_in_post_enabled": False,
+                "rweb_tipjar_consumption_enabled": True,
                 "responsive_web_graphql_exclude_directive_enabled": True,
                 "verified_phone_label_enabled": False,
                 "creator_subscriptions_tweet_preview_api_enabled": True,
                 "responsive_web_graphql_timeline_navigation_enabled": True,
                 "responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+                "premium_content_api_read_enabled": False,
+                "communities_web_enable_tweet_community_results_fetch": True,
                 "c9s_tweet_anatomy_moderator_badge_enabled": True,
-                "tweetypie_unmention_optimization_enabled": True,
+                "responsive_web_grok_analyze_button_fetch_trends_enabled": True,
+                "responsive_web_grok_analyze_post_followups_enabled": False,
+                "responsive_web_grok_share_attachment_enabled": False,
+                "articles_preview_enabled": True,
                 "responsive_web_edit_tweet_api_enabled": True,
                 "graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
                 "view_counts_everywhere_api_enabled": True,
                 "longform_notetweets_consumption_enabled": True,
                 "responsive_web_twitter_article_tweet_consumption_enabled": True,
                 "tweet_awards_web_tipping_enabled": False,
+                "creator_subscriptions_quote_tweet_preview_enabled": False,
                 "freedom_of_speech_not_reach_fetch_enabled": True,
                 "standardized_nudges_misinfo": True,
                 "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
                 "rweb_video_timestamps_enabled": True,
                 "longform_notetweets_rich_text_read_enabled": True,
                 "longform_notetweets_inline_media_enabled": True,
-                "responsive_web_media_download_video_enabled": False,
                 "responsive_web_enhance_cards_enabled": False,
             }),
         }

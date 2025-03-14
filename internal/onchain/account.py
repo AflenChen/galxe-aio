@@ -6,10 +6,10 @@ from web3.middleware import async_geth_poa_middleware
 from web3.contract.async_contract import AsyncContractConstructor
 
 from ..models import AccountInfo
-from ..utils import async_retry, get_proxy_url, get_w3, to_bytes
+from ..utils import async_retry, get_proxy_url, get_w3, to_bytes, int_to_decimal
 from ..config import RPCs
 
-from .constants import SCANS, EIP1559_CHAINS, SPACE_STATION_ABI
+from .constants import SCANS, EIP1559_CHAINS, SPACE_STATION_ABI, LOYALTY_POINTS_ABI
 
 
 class OnchainAccount:
@@ -95,6 +95,22 @@ class OnchainAccount:
         await self._tx_verification(tx_hash, action)
         return tx_hash.hex()
 
+    async def claim_capped(self, space_station_address, number_id, signature,
+                           nft_core_address, verify_id, powah, cap) -> str:
+        try:
+            space_station_address = Web3.to_checksum_address(space_station_address)
+            nft_core_address = Web3.to_checksum_address(nft_core_address)
+            contract = self.w3.eth.contract(space_station_address, abi=SPACE_STATION_ABI)
+
+            tx_hash = await self.build_and_send_tx(
+                contract.functions.claimCapped(number_id, nft_core_address, verify_id, powah, cap, to_bytes(signature)),
+                'Claim'
+            )
+            return tx_hash
+
+        except Exception as e:
+            raise Exception(f'Failed to claim capped: {str(e)}')
+
     @async_retry
     async def claim(self, space_station_address, number_id, signature, nft_core_address, verify_id, powah) -> str:
         try:
@@ -110,3 +126,23 @@ class OnchainAccount:
 
         except Exception as e:
             raise Exception(f'Failed to claim: {str(e)}')
+
+    @async_retry
+    async def claim_loyalty_points(self, lp_dist_station_address, lp_contract, verify_id, claim_fee, amount, signature) -> str:
+        try:
+            lp_dist_station_address = Web3.to_checksum_address(lp_dist_station_address)
+            lp_contract = Web3.to_checksum_address(lp_contract)
+            contract = self.w3.eth.contract(lp_dist_station_address, abi=LOYALTY_POINTS_ABI)
+            claim_fee = int(claim_fee)
+            amount = int(amount * 10 ** 18)
+            tx_hash = await self.build_and_send_tx(
+                contract.functions.increasePoint(
+                    lp_contract, verify_id, self.account.evm_address, amount, claim_fee, to_bytes(signature)
+                ),
+                f'Claim Loyalty Points (fee {round(int_to_decimal(claim_fee, 18), 1)} $G)',
+                value=claim_fee,
+            )
+            return tx_hash
+
+        except Exception as e:
+            raise Exception(f'Failed to claim loyalty points: {str(e)}')

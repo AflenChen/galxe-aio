@@ -1,3 +1,4 @@
+import platform
 import warnings
 from curl_cffi.requests import AsyncSession, BrowserType
 
@@ -8,6 +9,12 @@ from ..vars import USER_AGENT, SEC_CH_UA, SEC_CH_UA_PLATFORM
 
 
 warnings.filterwarnings('ignore', module='curl_cffi')
+
+
+if platform.system() == 'Windows':
+    IMPERSONATE = BrowserType.chrome124
+else:
+    IMPERSONATE = BrowserType.chrome131
 
 
 def get_default_headers():
@@ -27,7 +34,7 @@ def get_default_headers():
 
 class TLSClient:
 
-    def __init__(self, account: AccountInfo, custom_headers: dict = None, custom_cookies: dict = None):
+    def __init__(self, account: AccountInfo, custom_headers: dict = None, custom_cookies: dict = None, debug=False):
         self.account = account
         self._headers = {}
         self.proxy = get_proxy_url(self.account.proxy)
@@ -39,11 +46,12 @@ class TLSClient:
             proxies=self.proxies,
             headers=headers,
             cookies=custom_cookies,
-            impersonate=BrowserType.chrome120
+            impersonate=IMPERSONATE,
         )
+        self.debug = debug
 
     async def close(self):
-        self.sess.close()
+        await self.sess.close()
 
     @classmethod
     def _handle_response(cls, resp_raw, acceptable_statuses=None, resp_handler=None, with_text=False):
@@ -60,28 +68,33 @@ class TLSClient:
                             f'Response saved in logs/errors.txt\n{resp_raw.text}')
 
     def update_headers(self, new_headers: dict):
-        self._headers.update(new_headers)
+        self.sess.headers.update(new_headers)
 
     @async_retry
-    async def _raw_request(self, method, url, headers, **kwargs):
-        match method:
-            case 'GET':
-                resp = await self.sess.get(url, headers=headers, **kwargs)
-            case 'POST':
-                resp = await self.sess.post(url, headers=headers, **kwargs)
+    async def _raw_request(self, method, url, debug=False, **kwargs):
+        if debug:
+            print('tls cookies', self.sess.cookies)
+            print('new cookies', kwargs.get('cookies'))
+            print('tls headers', self.sess.headers)
+            print('new headers', kwargs.get('headers'))
+        match method.lower():
+            case 'get':
+                resp = await self.sess.get(url, **kwargs)
+            case 'post':
+                resp = await self.sess.post(url, **kwargs)
             case unexpected:
                 raise Exception(f'Wrong request method: {unexpected}')
         return resp
 
-    async def request(self, method, url, acceptable_statuses=None, resp_handler=None, with_text=False, **kwargs):
-        headers = self._headers.copy()
-        if 'headers' in kwargs:
-            headers.update(kwargs.pop('headers'))
+    async def request(self, method, url, acceptable_statuses=None, resp_handler=None, with_text=False,
+                      raw=False, **kwargs):
         if 'timeout' not in kwargs:
             kwargs.update({'timeout': 60})
         if DISABLE_SSL:
             kwargs.update({'verify': False})
-        resp = await self._raw_request(method, url, headers, **kwargs)
+        resp = await self._raw_request(method, url, **kwargs)
+        if raw:
+            return resp
         return self._handle_response(resp, acceptable_statuses, resp_handler, with_text)
 
     async def get(self, url, acceptable_statuses=None, resp_handler=None, with_text=False, **kwargs):
