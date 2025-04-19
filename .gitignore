@@ -4,6 +4,13 @@
 
 /venv
 
+config.toml
+files/discords.txt
+files/emails.txt
+files/evm_wallets.txt
+files/proxies.txt
+files/twitters.txt
+
 /__pycache__
 /*/__pycache__
 /*/*/__pycache__

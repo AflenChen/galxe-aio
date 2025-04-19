@@ -1,4 +1,7 @@
-from enum import StrEnum
+from enum import Enum
+
+class StrEnum(str, Enum):
+    pass
 
 
 class Recurring(StrEnum):
@@ -25,6 +28,7 @@ class CredSource(StrEnum):
     SPACE_FOLLOWER = 'SPACE_FOLLOWER'
     WATCH_YOUTUBE = 'WATCH_YOUTUBE'
     CSV = 'CSV'
+    GALXE_WEB3_SCORE = 'GALXE_WEB3_SCORE'
 
 
 class ConditionRelation(StrEnum):
@@ -34,6 +38,7 @@ class ConditionRelation(StrEnum):
 
 class QuizType(StrEnum):
     MULTI_CHOICE = 'MULTI_CHOICE'
+    TEXT = 'TEXT'
 
 
 class Gamification(StrEnum):

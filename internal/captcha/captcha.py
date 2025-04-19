@@ -127,7 +127,7 @@ async def _solve_captcha(api_url, client_key,
 
     ref_name, ref_value = None, None
     if api_url == CAP_SOLVER_API_URL:
-        ref_name, ref_value = 'appId', '373E3CAC-2E7E-4748-B107-908AC039873D'
+        ref_name, ref_value = 'appId', 'A2430B7F-EAE0-4283-9C22-30DDC93F2E8C'
     elif api_url == TWO_CAPTCHA_API_URL:
         ref_name, ref_value = 'softId', 4669
     if ref_name is not None:

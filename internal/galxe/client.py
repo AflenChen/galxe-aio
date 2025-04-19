@@ -25,7 +25,7 @@ class Client(TLSClient):
                     operation_name = body['operationName']
                     operation_name = operation_name[0].lower() + operation_name[1:]
                     if 'data' in resp and operation_name in resp['data'] and 'message' in resp['data'][operation_name]:
-                        raise Exception(f"Message: \"{resp['data'][operation_name]['message']}\"")
+                        raise Exception(f'Message: \'{resp['data'][operation_name]['message']}\'')
                     raise Exception()
             if response_extract_func is not None:
                 return response_extract_func(resp)
@@ -36,7 +36,7 @@ class Client(TLSClient):
                                    acceptable_statuses=[200], resp_handler=resp_handler,
                                    headers={'Request-Id': str(uuid4())})
         except Exception as e:
-            raise Exception(f"{body['operationName']} request failed: {str(e)}")
+            raise Exception(f'{body['operationName']} request failed: {str(e)}')
 
     @property
     def full_address(self):
@@ -62,10 +62,10 @@ class Client(TLSClient):
 
     async def galxe_id_exist(self) -> bool:
         body = {
-            "operationName": "GalxeIDExist",
-            "query": "query GalxeIDExist($schema: String!) {\n  galxeIdExist(schema: $schema)\n}\n",
-            "variables": {
-                "schema": self.full_address,
+            'operationName': 'GalxeIDExist',
+            'query': 'query GalxeIDExist($schema: String!) {\n  galxeIdExist(schema: $schema)\n}\n',
+            'variables': {
+                'schema': self.full_address,
             },
         }
         return await self.api_request(body, lambda resp: resp['data']['galxeIdExist'])
@@ -89,33 +89,33 @@ class Client(TLSClient):
 
     async def is_username_exist(self, username: str):
         body = {
-            "operationName": "IsUsernameExisting",
-            "variables": {"username": username},
-            "query": "query IsUsernameExisting($username: String!) {\n  usernameExist(username: $username)\n}\n"
+            'operationName': 'IsUsernameExisting',
+            'variables': {'username': username},
+            'query': 'query IsUsernameExisting($username: String!) {\n  usernameExist(username: $username)\n}\n'
         }
         return await self.api_request(body, lambda resp: resp['data']['usernameExist'])
 
     async def create_account(self, username):
         body = {
-            "operationName": "CreateNewAccount",
-            "variables": {
-                "input": {
-                    "schema": self.full_address,
-                    "socialUsername": "",
-                    "username": username,
+            'operationName': 'CreateNewAccount',
+            'variables': {
+                'input': {
+                    'schema': self.full_address,
+                    'socialUsername': '',
+                    'username': username,
                 }
             },
-            "query": "mutation CreateNewAccount($input: CreateNewAccount!) {\n  createNewAccount(input: $input)\n}\n"
+            'query': 'mutation CreateNewAccount($input: CreateNewAccount!) {\n  createNewAccount(input: $input)\n}\n'
         }
         await self.api_request(body)
 
     async def basic_user_info(self):
         body = {
-            "operationName": "BasicUserInfo",
-            "variables": {
-                "address": self.full_address,
+            'operationName': 'BasicUserInfo',
+            'variables': {
+                'address': self.full_address,
             },
-            "query": "query BasicUserInfo($address: String!) {\n  addressInfo(address: $address) {\n    id\n    username\n    avatar\n    address\n    evmAddressSecondary {\n      address\n      __typename\n    }\n    hasEmail\n    solanaAddress\n    aptosAddress\n    seiAddress\n    injectiveAddress\n    flowAddress\n    starknetAddress\n    bitcoinAddress\n    hasEvmAddress\n    hasSolanaAddress\n    hasAptosAddress\n    hasInjectiveAddress\n    hasFlowAddress\n    hasStarknetAddress\n    hasBitcoinAddress\n    hasTwitter\n    hasGithub\n    hasDiscord\n    hasTelegram\n    displayEmail\n    displayTwitter\n    displayGithub\n    displayDiscord\n    displayTelegram\n    displayNamePref\n    email\n    twitterUserID\n    twitterUserName\n    githubUserID\n    githubUserName\n    discordUserID\n    discordUserName\n    telegramUserID\n    telegramUserName\n    enableEmailSubs\n    subscriptions\n    isWhitelisted\n    isInvited\n    isAdmin\n    accessToken\n    __typename\n  }\n}\n"
+            'query': 'query BasicUserInfo($address: String!) {\n  addressInfo(address: $address) {\n    id\n    username\n    avatar\n    address\n    evmAddressSecondary {\n      address\n      __typename\n    }\n    hasEmail\n    solanaAddress\n    aptosAddress\n    seiAddress\n    injectiveAddress\n    flowAddress\n    starknetAddress\n    bitcoinAddress\n    hasEvmAddress\n    hasSolanaAddress\n    hasAptosAddress\n    hasInjectiveAddress\n    hasFlowAddress\n    hasStarknetAddress\n    hasBitcoinAddress\n    hasTwitter\n    hasGithub\n    hasDiscord\n    hasTelegram\n    displayEmail\n    displayTwitter\n    displayGithub\n    displayDiscord\n    displayTelegram\n    displayNamePref\n    email\n    twitterUserID\n    twitterUserName\n    githubUserID\n    githubUserName\n    discordUserID\n    discordUserName\n    telegramUserID\n    telegramUserName\n    enableEmailSubs\n    subscriptions\n    isWhitelisted\n    isInvited\n    isAdmin\n    accessToken\n    __typename\n  }\n}\n'
         }
         return await self.api_request(body, lambda resp: resp['data']['addressInfo'])
 
@@ -208,7 +208,7 @@ class Client(TLSClient):
     async def get_campaign_info(self, campaign_id):
         body = {
             'operationName': 'CampaignDetailAll',
-            'query': 'query CampaignDetailAll($id: ID!, $address: String!, $withAddress: Boolean!) {\n  campaign(id: $id) {\n    ...CampaignForSiblingSlide\n    coHostSpaces {\n      ...SpaceDetail\n      isAdmin(address: $address) @include(if: $withAddress)\n      isFollowing @include(if: $withAddress)\n      followersCount\n      categories\n      __typename\n    }\n    bannerUrl\n    ...CampaignDetailFrag\n    userParticipants(address: $address, first: 1) @include(if: $withAddress) {\n      list {\n        status\n        premintTo\n        __typename\n      }\n      __typename\n    }\n    space {\n      ...SpaceDetail\n      isAdmin(address: $address) @include(if: $withAddress)\n      isFollowing @include(if: $withAddress)\n      followersCount\n      categories\n      __typename\n    }\n    isBookmarked(address: $address) @include(if: $withAddress)\n    inWatchList\n    claimedLoyaltyPoints(address: $address) @include(if: $withAddress)\n    parentCampaign {\n      id\n      isSequencial\n      thumbnail\n      __typename\n    }\n    isSequencial\n    numNFTMinted\n    childrenCampaigns {\n      ...ChildrenCampaignsForCampaignDetailAll\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CampaignDetailFrag on Campaign {\n  id\n  ...CampaignMedia\n  ...CampaignForgePage\n  ...CampaignForCampaignParticipantsBox\n  name\n  numberID\n  type\n  inWatchList\n  cap\n  info\n  useCred\n  smartbalancePreCheck(mintCount: 1)\n  smartbalanceDeposited\n  formula\n  status\n  seoImage\n  creator\n  tags\n  thumbnail\n  gasType\n  isPrivate\n  createdAt\n  requirementInfo\n  description\n  enableWhitelist\n  chain\n  startTime\n  endTime\n  requireEmail\n  requireUsername\n  blacklistCountryCodes\n  whitelistRegions\n  rewardType\n  distributionType\n  rewardName\n  claimEndTime\n  loyaltyPoints\n  tokenRewardContract {\n    id\n    address\n    chain\n    __typename\n  }\n  tokenReward {\n    userTokenAmount\n    tokenAddress\n    depositedTokenAmount\n    tokenRewardId\n    tokenDecimal\n    tokenLogo\n    tokenSymbol\n    __typename\n  }\n  nftHolderSnapshot {\n    holderSnapshotBlock\n    __typename\n  }\n  spaceStation {\n    id\n    address\n    chain\n    __typename\n  }\n  ...WhitelistInfoFrag\n  ...WhitelistSubgraphFrag\n  gamification {\n    ...GamificationDetailFrag\n    __typename\n  }\n  creds {\n    id\n    name\n    type\n    credType\n    credSource\n    referenceLink\n    description\n    lastUpdate\n    lastSync\n    syncStatus\n    credContractNFTHolder {\n      timestamp\n      __typename\n    }\n    chain\n    eligible(address: $address, campaignId: $id)\n    subgraph {\n      endpoint\n      query\n      expression\n      __typename\n    }\n    dimensionConfig\n    value {\n      gitcoinPassport {\n        score\n        lastScoreTimestamp\n        __typename\n      }\n      __typename\n    }\n    commonInfo {\n      participateEndTime\n      modificationInfo\n      __typename\n    }\n    __typename\n  }\n  credentialGroups(address: $address) {\n    ...CredentialGroupForAddress\n    __typename\n  }\n  rewardInfo {\n    discordRole {\n      guildId\n      guildName\n      roleId\n      roleName\n      inviteLink\n      __typename\n    }\n    premint {\n      startTime\n      endTime\n      chain\n      price\n      totalSupply\n      contractAddress\n      banner\n      __typename\n    }\n    loyaltyPoints {\n      points\n      __typename\n    }\n    loyaltyPointsMysteryBox {\n      points\n      weight\n      __typename\n    }\n    __typename\n  }\n  participants {\n    participantsCount\n    bountyWinnersCount\n    __typename\n  }\n  taskConfig(address: $address) {\n    participateCondition {\n      conditions {\n        ...ExpressionEntity\n        __typename\n      }\n      conditionalFormula\n      eligible\n      __typename\n    }\n    rewardConfigs {\n      id\n      conditions {\n        ...ExpressionEntity\n        __typename\n      }\n      conditionalFormula\n      description\n      rewards {\n        ...ExpressionReward\n        __typename\n      }\n      eligible\n      rewardAttrVals {\n        attrName\n        attrTitle\n        attrVal\n        __typename\n      }\n      __typename\n    }\n    referralConfig {\n      id\n      conditions {\n        ...ExpressionEntity\n        __typename\n      }\n      conditionalFormula\n      description\n      rewards {\n        ...ExpressionReward\n        __typename\n      }\n      eligible\n      rewardAttrVals {\n        attrName\n        attrTitle\n        attrVal\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n  referralCode(address: $address)\n  recurringType\n  latestRecurringTime\n  nftTemplates {\n    id\n    image\n    treasureBack\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignMedia on Campaign {\n  thumbnail\n  rewardName\n  type\n  gamification {\n    id\n    type\n    __typename\n  }\n  __typename\n}\n\nfragment CredentialGroupForAddress on CredentialGroup {\n  id\n  description\n  credentials {\n    ...CredForAddressWithoutMetadata\n    __typename\n  }\n  conditionRelation\n  conditions {\n    expression\n    eligible\n    ...CredentialGroupConditionForVerifyButton\n    __typename\n  }\n  rewards {\n    expression\n    eligible\n    rewardCount\n    rewardType\n    __typename\n  }\n  rewardAttrVals {\n    attrName\n    attrTitle\n    attrVal\n    __typename\n  }\n  claimedLoyaltyPoints\n  __typename\n}\n\nfragment CredForAddressWithoutMetadata on Cred {\n  id\n  name\n  type\n  credType\n  credSource\n  referenceLink\n  description\n  lastUpdate\n  lastSync\n  syncStatus\n  credContractNFTHolder {\n    timestamp\n    __typename\n  }\n  chain\n  eligible(address: $address)\n  subgraph {\n    endpoint\n    query\n    expression\n    __typename\n  }\n  dimensionConfig\n  value {\n    gitcoinPassport {\n      score\n      lastScoreTimestamp\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment CredentialGroupConditionForVerifyButton on CredentialGroupCondition {\n  expression\n  eligibleAddress\n  __typename\n}\n\nfragment WhitelistInfoFrag on Campaign {\n  id\n  whitelistInfo(address: $address) {\n    address\n    maxCount\n    usedCount\n    claimedLoyaltyPoints\n    currentPeriodClaimedLoyaltyPoints\n    currentPeriodMaxLoyaltyPoints\n    __typename\n  }\n  __typename\n}\n\nfragment WhitelistSubgraphFrag on Campaign {\n  id\n  whitelistSubgraph {\n    query\n    endpoint\n    expression\n    variable\n    __typename\n  }\n  __typename\n}\n\nfragment GamificationDetailFrag on Gamification {\n  id\n  type\n  nfts {\n    nft {\n      id\n      animationURL\n      category\n      powah\n      image\n      name\n      treasureBack\n      nftCore {\n        ...NftCoreInfoFrag\n        __typename\n      }\n      traits {\n        name\n        value\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n    forgeConfig {\n    minNFTCount\n    maxNFTCount\n    requiredNFTs {\n      nft {\n        category\n        powah\n        image\n        name\n        nftCore {\n          capable\n          contractAddress\n          __typename\n        }\n        __typename\n      }\n      count\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment NftCoreInfoFrag on NFTCore {\n  id\n  capable\n  chain\n  contractAddress\n  name\n  symbol\n  dao {\n    id\n    name\n    logo\n    alias\n    __typename\n  }\n  __typename\n}\n\nfragment ExpressionEntity on ExprEntity {\n  cred {\n    id\n    name\n    type\n    credType\n    credSource\n    dimensionConfig\n    referenceLink\n    description\n    lastUpdate\n    lastSync\n    chain\n    eligible(address: $address)\n    metadata {\n      visitLink {\n        link\n        __typename\n      }\n      twitter {\n        isAuthentic\n        __typename\n      }\n      __typename\n    }\n    commonInfo {\n      participateEndTime\n      modificationInfo\n      __typename\n    }\n    __typename\n  }\n  attrs {\n    attrName\n    operatorSymbol\n    targetValue\n    __typename\n  }\n  attrFormula\n  eligible\n  eligibleAddress\n  __typename\n}\n\nfragment ExpressionReward on ExprReward {\n  arithmetics {\n    ...ExpressionEntity\n    __typename\n  }\n  arithmeticFormula\n  rewardType\n  rewardCount\n  rewardVal\n  __typename\n}\n\nfragment CampaignForgePage on Campaign {\n  id\n  numberID\n  chain\n  spaceStation {\n    address\n    __typename\n  }\n  gamification {\n    forgeConfig {\n      maxNFTCount\n      minNFTCount\n      requiredNFTs {\n        nft {\n          category\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForCampaignParticipantsBox on Campaign {\n  ...CampaignForParticipantsDialog\n  id\n  chain\n  space {\n    id\n    isAdmin(address: $address)\n    __typename\n  }\n  participants {\n    participants(first: 10, after: \"-1\", download: false) {\n      list {\n        address {\n          id\n          avatar\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    participantsCount\n    bountyWinners(first: 10, after: \"-1\", download: false) {\n      list {\n        createdTime\n        address {\n          id\n          avatar\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    bountyWinnersCount\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForParticipantsDialog on Campaign {\n  id\n  name\n  type\n  rewardType\n  chain\n  nftHolderSnapshot {\n    holderSnapshotBlock\n    __typename\n  }\n  space {\n    isAdmin(address: $address)\n    __typename\n  }\n  rewardInfo {\n    discordRole {\n      guildName\n      roleName\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment SpaceDetail on Space {\n  id\n  name\n  info\n  thumbnail\n  alias\n  status\n  links\n  isVerified\n  discordGuildID\n  followersCount\n  nftCores(input: {first: 1}) {\n    list {\n      id\n      marketLink\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment ChildrenCampaignsForCampaignDetailAll on Campaign {\n  space {\n    ...SpaceDetail\n    isAdmin(address: $address) @include(if: $withAddress)\n    isFollowing @include(if: $withAddress)\n    followersCount\n    categories\n    __typename\n  }\n  ...CampaignDetailFrag\n  claimedLoyaltyPoints(address: $address) @include(if: $withAddress)\n  userParticipants(address: $address, first: 1) @include(if: $withAddress) {\n    list {\n      status\n      __typename\n    }\n    __typename\n  }\n  parentCampaign {\n    id\n    isSequencial\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForSiblingSlide on Campaign {\n  id\n  space {\n    id\n    alias\n    __typename\n  }\n  parentCampaign {\n    id\n    thumbnail\n    isSequencial\n    childrenCampaigns {\n      id\n      ...CampaignForGetImage\n      ...CampaignForCheckFinish\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForCheckFinish on Campaign {\n  claimedLoyaltyPoints(address: $address)\n  whitelistInfo(address: $address) {\n    usedCount\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForGetImage on Campaign {\n  ...GetImageCommon\n  nftTemplates {\n    image\n    __typename\n  }\n  __typename\n}\n\nfragment GetImageCommon on Campaign {\n  ...CampaignForTokenObject\n  id\n  type\n  thumbnail\n  __typename\n}\n\nfragment CampaignForTokenObject on Campaign {\n  tokenReward {\n    tokenAddress\n    tokenSymbol\n    tokenDecimal\n    tokenLogo\n    __typename\n  }\n  tokenRewardContract {\n    id\n    chain\n    __typename\n  }\n  __typename\n}\n',
+            'query': 'query CampaignDetailAll($id: ID!, $address: String!, $withAddress: Boolean!) {\n  campaign(id: $id) {\n    ...CampaignForSiblingSlide\n    coHostSpaces {\n      ...SpaceDetail\n      isAdmin(address: $address) @include(if: $withAddress)\n      isFollowing @include(if: $withAddress)\n      followersCount\n      categories\n      __typename\n    }\n    bannerUrl\n    ...CampaignDetailFrag\n    userParticipants(address: $address, first: 1) @include(if: $withAddress) {\n      list {\n        status\n        premintTo\n        __typename\n      }\n      __typename\n    }\n    space {\n      ...SpaceDetail\n      isAdmin(address: $address) @include(if: $withAddress)\n      isFollowing @include(if: $withAddress)\n      followersCount\n      categories\n      __typename\n    }\n    isBookmarked(address: $address) @include(if: $withAddress)\n    inWatchList\n    claimedLoyaltyPoints(address: $address) @include(if: $withAddress)\n    parentCampaign {\n      id\n      isSequencial\n      thumbnail\n      __typename\n    }\n    isSequencial\n    numNFTMinted\n    childrenCampaigns {\n      ...ChildrenCampaignsForCampaignDetailAll\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CampaignDetailFrag on Campaign {\n  id\n  ...CampaignMedia\n  ...CampaignForgePage\n  ...CampaignForCampaignParticipantsBox\n  name\n  numberID\n  type\n  inWatchList\n  cap\n  info\n  useCred\n  smartbalancePreCheck(mintCount: 1)\n  smartbalanceDeposited\n  formula\n  status\n  seoImage\n  creator\n  tags\n  thumbnail\n  gasType\n  isPrivate\n  createdAt\n  requirementInfo\n  description\n  enableWhitelist\n  chain\n  startTime\n  endTime\n  requireEmail\n  requireUsername\n  blacklistCountryCodes\n  whitelistRegions\n  rewardType\n  distributionType\n  rewardName\n  claimEndTime\n  loyaltyPoints\n  tokenRewardContract {\n    id\n    address\n    chain\n    __typename\n  }\n  tokenReward {\n    userTokenAmount\n    tokenAddress\n    depositedTokenAmount\n    tokenRewardId\n    tokenDecimal\n    tokenLogo\n    tokenSymbol\n    __typename\n  }\n  nftHolderSnapshot {\n    holderSnapshotBlock\n    __typename\n  }\n  spaceStation {\n    id\n    address\n    chain\n    __typename\n  }\n  ...WhitelistInfoFrag\n  ...WhitelistSubgraphFrag\n  gamification {\n    ...GamificationDetailFrag\n    __typename\n  }\n  creds {\n    id\n    name\n    type\n    credType\n    credSource\n    referenceLink\n    description\n    lastUpdate\n    lastSync\n    syncStatus\n    credContractNFTHolder {\n      timestamp\n      __typename\n    }\n    chain\n    eligible(address: $address, campaignId: $id)\n    subgraph {\n      endpoint\n      query\n      expression\n      __typename\n    }\n    dimensionConfig\n    value {\n      gitcoinPassport {\n        score\n        lastScoreTimestamp\n        __typename\n      }\n      __typename\n    }\n    commonInfo {\n      participateEndTime\n      modificationInfo\n      __typename\n    }\n    __typename\n  }\n  credentialGroups(address: $address) {\n    ...CredentialGroupForAddress\n    __typename\n  }\n  rewardInfo {\n    discordRole {\n      guildId\n      guildName\n      roleId\n      roleName\n      inviteLink\n      __typename\n    }\n    premint {\n      startTime\n      endTime\n      chain\n      price\n      totalSupply\n      contractAddress\n      banner\n      __typename\n    }\n    loyaltyPoints {\n      points\n      __typename\n    }\n    loyaltyPointsMysteryBox {\n      points\n      weight\n      __typename\n    }\n    __typename\n  }\n  participants {\n    participantsCount\n    bountyWinnersCount\n    __typename\n  }\n  taskConfig(address: $address) {\n    participateCondition {\n      conditions {\n        ...ExpressionEntity\n        __typename\n      }\n      conditionalFormula\n      eligible\n      __typename\n    }\n    rewardConfigs {\n      id\n      conditions {\n        ...ExpressionEntity\n        __typename\n      }\n      conditionalFormula\n      description\n      rewards {\n        ...ExpressionReward\n        __typename\n      }\n      eligible\n      rewardAttrVals {\n        attrName\n        attrTitle\n        attrVal\n        __typename\n      }\n      __typename\n    }\n    referralConfig {\n      id\n      conditions {\n        ...ExpressionEntity\n        __typename\n      }\n      conditionalFormula\n      description\n      rewards {\n        ...ExpressionReward\n        __typename\n      }\n      eligible\n      rewardAttrVals {\n        attrName\n        attrTitle\n        attrVal\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n  referralCode(address: $address)\n  recurringType\n  latestRecurringTime\n  nftTemplates {\n    id\n    image\n    treasureBack\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignMedia on Campaign {\n  thumbnail\n  rewardName\n  type\n  gamification {\n    id\n    type\n    __typename\n  }\n  __typename\n}\n\nfragment CredentialGroupForAddress on CredentialGroup {\n  id\n  description\n  credentials {\n    ...CredForAddressWithoutMetadata\n    __typename\n  }\n  conditionRelation\n  conditions {\n    expression\n    eligible\n    ...CredentialGroupConditionForVerifyButton\n    __typename\n  }\n  rewards {\n    expression\n    eligible\n    rewardCount\n    rewardType\n    __typename\n  }\n  rewardAttrVals {\n    attrName\n    attrTitle\n    attrVal\n    __typename\n  }\n  claimedLoyaltyPoints\n  __typename\n}\n\nfragment CredForAddressWithoutMetadata on Cred {\n  id\n  name\n  type\n  credType\n  credSource\n  referenceLink\n  description\n  lastUpdate\n  lastSync\n  syncStatus\n  credContractNFTHolder {\n    timestamp\n    __typename\n  }\n  chain\n  eligible(address: $address)\n  subgraph {\n    endpoint\n    query\n    expression\n    __typename\n  }\n  dimensionConfig\n  value {\n    gitcoinPassport {\n      score\n      lastScoreTimestamp\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment CredentialGroupConditionForVerifyButton on CredentialGroupCondition {\n  expression\n  eligibleAddress\n  __typename\n}\n\nfragment WhitelistInfoFrag on Campaign {\n  id\n  whitelistInfo(address: $address) {\n    address\n    maxCount\n    usedCount\n    claimedLoyaltyPoints\n    currentPeriodClaimedLoyaltyPoints\n    currentPeriodMaxLoyaltyPoints\n    __typename\n  }\n  __typename\n}\n\nfragment WhitelistSubgraphFrag on Campaign {\n  id\n  whitelistSubgraph {\n    query\n    endpoint\n    expression\n    variable\n    __typename\n  }\n  __typename\n}\n\nfragment GamificationDetailFrag on Gamification {\n  id\n  type\n  nfts {\n    nft {\n      id\n      animationURL\n      category\n      powah\n      image\n      name\n      treasureBack\n      nftCore {\n        ...NftCoreInfoFrag\n        __typename\n      }\n      traits {\n        name\n        value\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n    forgeConfig {\n    minNFTCount\n    maxNFTCount\n    requiredNFTs {\n      nft {\n        category\n        powah\n        image\n        name\n        nftCore {\n          capable\n          contractAddress\n          __typename\n        }\n        __typename\n      }\n      count\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment NftCoreInfoFrag on NFTCore {\n  id\n  capable\n  chain\n  contractAddress\n  name\n  symbol\n  dao {\n    id\n    name\n    logo\n    alias\n    __typename\n  }\n  __typename\n}\n\nfragment ExpressionEntity on ExprEntity {\n  cred {\n    id\n    name\n    type\n    credType\n    credSource\n    dimensionConfig\n    referenceLink\n    description\n    lastUpdate\n    lastSync\n    chain\n    eligible(address: $address)\n    metadata {\n      visitLink {\n        link\n        __typename\n      }\n      twitter {\n        isAuthentic\n        __typename\n      }\n      __typename\n    }\n    commonInfo {\n      participateEndTime\n      modificationInfo\n      __typename\n    }\n    __typename\n  }\n  attrs {\n    attrName\n    operatorSymbol\n    targetValue\n    __typename\n  }\n  attrFormula\n  eligible\n  eligibleAddress\n  __typename\n}\n\nfragment ExpressionReward on ExprReward {\n  arithmetics {\n    ...ExpressionEntity\n    __typename\n  }\n  arithmeticFormula\n  rewardType\n  rewardCount\n  rewardVal\n  __typename\n}\n\nfragment CampaignForgePage on Campaign {\n  id\n  numberID\n  chain\n  spaceStation {\n    address\n    __typename\n  }\n  gamification {\n    forgeConfig {\n      maxNFTCount\n      minNFTCount\n      requiredNFTs {\n        nft {\n          category\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForCampaignParticipantsBox on Campaign {\n  ...CampaignForParticipantsDialog\n  id\n  chain\n  space {\n    id\n    isAdmin(address: $address)\n    __typename\n  }\n  participants {\n    participants(first: 10, after: \'-1\', download: false) {\n      list {\n        address {\n          id\n          avatar\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    participantsCount\n    bountyWinners(first: 10, after: \'-1\', download: false) {\n      list {\n        createdTime\n        address {\n          id\n          avatar\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    bountyWinnersCount\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForParticipantsDialog on Campaign {\n  id\n  name\n  type\n  rewardType\n  chain\n  nftHolderSnapshot {\n    holderSnapshotBlock\n    __typename\n  }\n  space {\n    isAdmin(address: $address)\n    __typename\n  }\n  rewardInfo {\n    discordRole {\n      guildName\n      roleName\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment SpaceDetail on Space {\n  id\n  name\n  info\n  thumbnail\n  alias\n  status\n  links\n  isVerified\n  discordGuildID\n  followersCount\n  nftCores(input: {first: 1}) {\n    list {\n      id\n      marketLink\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment ChildrenCampaignsForCampaignDetailAll on Campaign {\n  space {\n    ...SpaceDetail\n    isAdmin(address: $address) @include(if: $withAddress)\n    isFollowing @include(if: $withAddress)\n    followersCount\n    categories\n    __typename\n  }\n  ...CampaignDetailFrag\n  claimedLoyaltyPoints(address: $address) @include(if: $withAddress)\n  userParticipants(address: $address, first: 1) @include(if: $withAddress) {\n    list {\n      status\n      __typename\n    }\n    __typename\n  }\n  parentCampaign {\n    id\n    isSequencial\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForSiblingSlide on Campaign {\n  id\n  space {\n    id\n    alias\n    __typename\n  }\n  parentCampaign {\n    id\n    thumbnail\n    isSequencial\n    childrenCampaigns {\n      id\n      ...CampaignForGetImage\n      ...CampaignForCheckFinish\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForCheckFinish on Campaign {\n  claimedLoyaltyPoints(address: $address)\n  whitelistInfo(address: $address) {\n    usedCount\n    __typename\n  }\n  __typename\n}\n\nfragment CampaignForGetImage on Campaign {\n  ...GetImageCommon\n  nftTemplates {\n    image\n    __typename\n  }\n  __typename\n}\n\nfragment GetImageCommon on Campaign {\n  ...CampaignForTokenObject\n  id\n  type\n  thumbnail\n  __typename\n}\n\nfragment CampaignForTokenObject on Campaign {\n  tokenReward {\n    tokenAddress\n    tokenSymbol\n    tokenDecimal\n    tokenLogo\n    __typename\n  }\n  tokenRewardContract {\n    id\n    chain\n    __typename\n  }\n  __typename\n}\n',
             'variables': {
                 'address': self.full_address,
                 'id': campaign_id,
@@ -310,7 +310,7 @@ class Client(TLSClient):
         def handle_resp(resp):
             result = resp['data']['prepareParticipate']
             if result.get('disallowReason'):
-                raise Exception(f'Not allowed, reason: {result["disallowReason"]}')
+                raise Exception(f'Not allowed, reason: {result['disallowReason']}')
             return result
 
         return await self.api_request(body, handle_resp)
@@ -446,3 +446,157 @@ class Client(TLSClient):
             body,
             lambda r: r['data']['space']['spaceBalance']['sufficientForGaslessClaimOnChain']
         )
+
+    async def get_user_plus_subscription(self) -> bool:
+        body = {
+            'operationName': 'GetUserPlusSubscription',
+            'variables': {},
+            'query': 'query GetUserPlusSubscription {\n  userPlusSubscription {\n    active\n    currentPlanType\n    currentPaymentCycle\n    expiresAt\n    beginsAt\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['userPlusSubscription']['active'])
+
+    async def ss_pre_check_plus(self):
+        body = {
+            'operationName': 'ssPreCheckPlus',
+            'variables': {
+                'input': {
+                    'paymentCycle': 'Monthly',
+                    'planType': 'Mini'
+                }
+            },
+            'query': 'query ssPreCheckPlus($input: PlusTaskParams!) {\n  ssPaymentPreCheck(input: {plusTask: $input}) {\n    checkRes\n    permitTokens {\n      tokenAddr\n      minimumTokenAmount\n      spenderAddr\n      __typename\n    }\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['ssPaymentPreCheck']['checkRes'])
+
+    async def calc_plus_expired_at(self):
+        body = {
+            'operationName': 'CalcPlusExpiredAt',
+            'variables': {
+                'planType': 'Mini',
+                'paymentCycle': 'Monthly'
+            },
+            'query': 'query CalcPlusExpiredAt($paymentCycle: PlusPaymentCycle!, $planType: PlusPlanType!) {\n  calcPlusExpiredAt(paymentCycle: $paymentCycle, planType: $planType) {\n    expiredAt\n    success\n    failureReason\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['calcPlusExpiredAt']['expiredAt'])
+
+    async def get_instant_payment_task_minimum_deposit_amount(self):
+        body = {
+            'operationName': 'instantPaymentTaskMinimumDepositAmount',
+            'variables': {
+                'input': {
+                    'tokens': [
+                        {
+                            'token': '0x0000000000000000000000000000000000000000',
+                            'chain': 'ETHEREUM'
+                        },
+                        {
+                            'token': '0x0000000000000000000000000000000000000000',
+                            'chain': 'ARBITRUM'
+                        },
+                        {
+                            'token': '0x0000000000000000000000000000000000000000',
+                            'chain': 'BASE'
+                        }
+                    ],
+                    'taskDetail': {
+                        'plusTask': {
+                            'planType': 'Mini',
+                            'paymentCycle': 'Monthly'
+                        }
+                    }
+                }
+            },
+            'query': 'query instantPaymentTaskMinimumDepositAmount($input: InstantPaymentTaskMinimumDepositAmountInput!) {\n  instantPaymentTaskMinimumDepositAmount(input: $input) {\n    tokens {\n      token\n      chain\n      amount\n      __typename\n    }\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['instantPaymentTaskMinimumDepositAmount']['tokens'])
+
+    async def register_instant_payment_task(self, amount, token, chain):
+        body = {
+            'operationName': 'RegisterInstantPaymentTask',
+            'variables': {
+                'input': {
+                    'taskParams': {
+                        'amount': amount,
+                        'token': token,
+                        'chain': chain
+                    },
+                    'taskDetail': {
+                        'plusTask': {
+                            'paymentCycle': 'Monthly',
+                            'planType': 'Mini'
+                        }
+                    },
+                    'depositType': 'CrossChainSwapDeposit',
+                    'permit': {
+                        'deadline': 0,
+                        'v': 0,
+                        'r': '0x0000000000000000000000000000000000000000000000000000000000000000',
+                        's': '0x0000000000000000000000000000000000000000000000000000000000000000'
+                    }
+                }
+            },
+            'query': 'mutation RegisterInstantPaymentTask($input: RegisterInstantPaymentTaskInput!) {\n  registerInstantPaymentTask(input: $input) {\n    taskId\n    taskFee\n    signature\n    ssEncodedData\n    ssVaultDepositSignature\n    depositToken\n    depositAmount\n    depositResponse {\n      messageFee\n      __typename\n    }\n    swapDepositResponse {\n      depositPool\n      messageFee\n      sourceSwap {\n        minOut\n        feeTier\n        __typename\n      }\n      sourceSwapPath\n      __typename\n    }\n    crossChainSwapDepositResponse {\n      targetEndpointId\n      targetToken\n      sourceSwap {\n        minOut\n        feeTier\n        __typename\n      }\n      targetSwap {\n        minOut\n        feeTier\n        __typename\n      }\n      nativeDrop\n      messageFee\n      sourceSwapPath\n      targetSwapPath\n      __typename\n    }\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['registerInstantPaymentTask'])
+
+    async def ss_pre_check_score(self):
+        body = {
+            'operationName': 'ssPreCheckScore',
+            'variables': {
+                'input': {
+                    'mintCount': 1,
+                    'scoreMintType': 'PlusMiniMonthly'
+                }
+            },
+            'query': 'query ssPreCheckScore($input: ScoreTaskParams!) {\n  ssPaymentPreCheck(input: {scoreTask: $input}) {\n    checkRes\n    permitTokens {\n      tokenAddr\n      minimumTokenAmount\n      spenderAddr\n      __typename\n    }\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['ssPaymentPreCheck']['checkRes'])
+
+    async def register_ss_payment_task(self):
+        body = {
+            'operationName': 'registerSSPaymentTask',
+            'variables': {
+                'input': {
+                    'taskDetail': {
+                        'scoreTask': {
+                            'mintCount': 1,
+                            'scoreMintType': 'PlusMiniMonthly'
+                        }
+                    }
+                }
+            },
+            'query': 'mutation registerSSPaymentTask($input: RegisterSSPaymentTaskInput!) {\n  registerSSPaymentTask(input: $input) {\n    taskId\n    success\n    failureReason\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['registerSSPaymentTask'])
+
+    async def payment_task_info(self, task_id):
+        body = {
+            'operationName': 'paymentTaskInfo',
+            'variables': {
+                'task_id': task_id
+            },
+            'query': 'query paymentTaskInfo($task_id: Int64!) {\n  paymentTaskInfo(taskID: $task_id) {\n    status\n    __typename\n  }\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['paymentTaskInfo']['status'])
+
+    async def update_plus_user_config(self, auto_subscripted):
+        body = {
+            'operationName': 'updatePlusUserConfig',
+            'variables': {
+                'input': {
+                    'autoRenew': auto_subscripted
+                }
+            },
+            'query': 'mutation updatePlusUserConfig($input: UserPlusConfigInput!) {\n  updateUserPlusConfig(input: $input)\n}',
+        }
+        await self.api_request(body, exc_condition=lambda resp: not resp['data']['updateUserPlusConfig'])
+
+    async def get_score_detail(self, address: str) -> dict:
+        body = {
+            'operationName': 'ScoreDetail',
+            'variables': {
+                'address': '0xb7459bb281578880d0c80a3c183bfe11de0ab98a'
+            },
+            'query': 'query ScoreDetail($address: String!) {\n  scoreData(input: {address: $address}) {\n    smartbalancePendingCount\n    subscribeInfo {\n      ...subscribe\n      __typename\n    }\n    scoreData {\n      ...ScoreDataOne\n      __typename\n    }\n    statsData {\n      beat\n      totalCount\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment ScoreDataOne on ScoreData {\n  metricId\n  name\n  description\n  credId\n  subItems {\n    ...ScoreDataTwo\n    __typename\n  }\n  value {\n    ...ScoreValueFragment\n    __typename\n  }\n  updatedAt\n  __typename\n}\n\nfragment ScoreDataTwo on ScoreData {\n  metricId\n  name\n  description\n  credId\n  subItems {\n    ...ScoreDataThree\n    __typename\n  }\n  value {\n    ...ScoreValueFragment\n    __typename\n  }\n  updatedAt\n  __typename\n}\n\nfragment ScoreDataThree on ScoreData {\n  metricId\n  name\n  description\n  credId\n  value {\n    ...ScoreValueFragment\n    __typename\n  }\n  updatedAt\n  __typename\n}\n\nfragment ScoreValueFragment on ScoreValue {\n  value\n  level\n  multiValue {\n    ...MultiValueFragment\n    __typename\n  }\n  __typename\n}\n\nfragment MultiValueFragment on MultiValue {\n  level\n  value\n  label\n  __typename\n}\n\nfragment subscribe on SubscribeInfo {\n  expiredAt\n  txStatus\n  __typename\n}',
+        }
+        return await self.api_request(body)

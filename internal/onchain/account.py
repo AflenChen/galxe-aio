@@ -9,7 +9,7 @@ from ..models import AccountInfo
 from ..utils import async_retry, get_proxy_url, get_w3, to_bytes, int_to_decimal
 from ..config import RPCs
 
-from .constants import SCANS, EIP1559_CHAINS, SPACE_STATION_ABI, LOYALTY_POINTS_ABI
+from .constants import SCANS, EIP1559_CHAINS, SPACE_STATION_ABI, LOYALTY_POINTS_ABI, ETHEREUM_INSTANT_PAYMENT_ABI, ARBITRUM_INSTANT_PAYMENT_ABI, BASE_INSTANT_PAYMENT_ABI, INSTANT_PAYMENT_CONTRACTS
 
 
 class OnchainAccount:
@@ -30,6 +30,9 @@ class OnchainAccount:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
+
+    async def get_eth_balance(self) -> int:
+        return await self.w3.eth.get_balance(self.account.evm_address)
 
     @async_retry
     async def _build_and_send_tx(self, func: AsyncContractConstructor, **tx_vars):
@@ -146,3 +149,69 @@ class OnchainAccount:
 
         except Exception as e:
             raise Exception(f'Failed to claim loyalty points: {str(e)}')
+
+
+    def get_contract_address(self, chain: str) -> str:
+        if chain not in INSTANT_PAYMENT_CONTRACTS:
+            raise ValueError(f"Unsupported chain: {chain}")
+        return INSTANT_PAYMENT_CONTRACTS[chain]
+
+    @async_retry
+    async def subscript_galaxe_plus_cross_chain(self, chain: str, user_address: str, deposit_token: str, deposit_amount: int, task_id: int, task_fee: int, target_endpoint_id: int,
+                                                target_token: str, source_swap: dict, target_swap: dict, permit: dict, native_drop: int, message_fee: int, signature: bytes, ):
+        try:
+            contract_address= Web3.to_checksum_address(self.get_contract_address(chain))
+            if chain == 'Etherem' :
+                abi = ETHEREUM_INSTANT_PAYMENT_ABI
+            if chain == 'Base' :
+                abi = BASE_INSTANT_PAYMENT_ABI
+            if chain == 'Arbitrum' :
+                abi = ARBITRUM_INSTANT_PAYMENT_ABI
+
+            contract = Web3.eth.contract(contract_address, abi=abi)
+
+            deposit_token = Web3.to_checksum_address(deposit_token)
+            target_token = Web3.to_checksum_address(target_token)
+            user_address = Web3.to_checksum_address(user_address)
+
+            # 构造链特定结构体参数
+            if chain == "base":
+                source_swap_param = (source_swap["minOut"], source_swap["path"])
+                target_swap_param = (target_swap["minOut"], target_swap["path"])
+            else:
+                source_swap_param = (source_swap["minOut"], source_swap["feeTier"])
+                target_swap_param = (target_swap["minOut"], target_swap["feeTier"])
+
+            permit_param = (
+                permit["deadline"],
+                permit["v"],
+                permit["r"],
+                permit["s"],
+            )
+
+            tx_fn = contract.functions.crossChainSwapDeposit(
+                user_address,
+                deposit_token,
+                int(deposit_amount),
+                int(task_id),
+                int(task_fee),
+                int(target_endpoint_id),
+                target_token,
+                source_swap_param,
+                target_swap_param,
+                permit_param,
+                int(native_drop),
+                int(message_fee),
+                signature,
+            )
+
+            tx_hash = await self.build_and_send_tx(
+                tx_fn,
+                f"[{chain.upper()}] CrossChain Loyalty Points Subscription: (fee {round(int_to_decimal(message_fee, 18), 1)} $ETH)",
+                value=message_fee,
+            )
+            return tx_hash
+
+        except Exception as e:
+            raise Exception(f"[{chain}] Subscription via crossChainSwapDeposit failed: {str(e)}")
+

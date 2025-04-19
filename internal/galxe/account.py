@@ -508,6 +508,9 @@ class GalxeAccount:
             case CredSource.WATCH_YOUTUBE:
                 await self.add_typed_credential(campaign_id, credential)
                 return True
+            case CredSource.GALXE_WEB3_SCORE:
+                await self._complete_web3_score(campaign_id, credential)
+                return True
             case CredSource.CSV:
                 raise Exception(f'{self.idx}) It seems like you are not eligible for custom project requirements')
         logger.warning(f'{self.idx}) {credential["name"]} is not done or not updated yet. Trying to verify it anyway')
@@ -526,6 +529,9 @@ class GalxeAccount:
                 return True
             case CredSource.WATCH_YOUTUBE:
                 await self.add_typed_credential(campaign_id, credential)
+                return True
+            case CredSource.GALXE_WEB3_SCORE:
+                await self._complete_web3_score(campaign_id, credential)
                 return True
             case unexpected:
                 if not HIDE_UNSUPPORTED:
@@ -568,35 +574,68 @@ class GalxeAccount:
     async def solve_quiz(self, quiz):
         quiz_id = quiz['id']
         answers = await quiz_storage.get_value(quiz_id)
+        
+        # If no stored answers, solve the quiz
         if answers is None:
             quizzes = await self.client.read_quiz(quiz_id)
 
-            if any(q['type'] != QuizType.MULTI_CHOICE for q in quizzes):
-                raise Exception(f"Can't solve quiz with not multi-choice items: {quiz_id}")
+            # Check if the quiz is entirely TEXT input type
+            is_text_quiz = all(q['type'] == QuizType.TEXT for q in quizzes)
+            if is_text_quiz:
+                logger.info(f'{self.idx}) {quiz["name"]} is a text-based quiz, submitting "yes"...')
 
+                # Default to answering "yes" for all questions (customize if needed)
+                text_answers = ["yes" for _ in quizzes]
+
+                sync_options = self._default_sync_options(quiz_id)
+                sync_options.update({'quiz': {'answers': text_answers}})
+
+                result = await self.client.sync_credential_value(sync_options, only_allow=False, quiz=True)
+
+                if all(result['quiz']['correct']):
+                    logger.success(f'{self.idx}) {quiz["name"]} solved with text answers')
+                    await quiz_storage.set_value(quiz_id, text_answers)
+                    await quiz_storage.async_save()
+                else:
+                    raise Exception(f'{quiz["name"]} text quiz failed with answer "yes"')
+                return
+
+            # If not all questions are MULTI_CHOICE, raise exception
+            if any(q['type'] != QuizType.MULTI_CHOICE for q in quizzes):
+                raise Exception(f"Unsupported quiz type in {quiz_id}")
+
+            # Initialize brute-force attempts for multiple-choice questions
             answers = [-1 for _ in quizzes]
             correct = [False for _ in quizzes]
 
             while not all(correct):
+                # Increment incorrect answers
                 answers = [answers[i] if correct[i] else answers[i] + 1 for i in range(len(answers))]
-                if any(a >= len(quizzes[i]['items']) for i, a in enumerate(answers)):
-                    raise Exception(f"Can't find answers for {quiz['name']}")
 
-                logger.info(f'{self.idx}) {quiz["name"]} attempt to answer with {answers}')
+                # If index out of range, it means options are exhausted
+                if any(a >= len(quizzes[i]['items']) for i, a in enumerate(answers)):
+                    raise Exception(f"Can't find correct answers for quiz: {quiz['name']}")
+
+                logger.info(f'{self.idx}) {quiz["name"]} trying answers {answers}')
                 sync_options = self._default_sync_options(quiz_id)
                 sync_options.update({'quiz': {'answers': [str(a) for a in answers]}})
 
+                # Submit answer attempt
                 result = await self.client.sync_credential_value(sync_options, only_allow=False, quiz=True)
                 correct = result['quiz']['correct']
 
+            # Save correct answers to local storage
             logger.success(f'{self.idx}) {quiz["name"]} solved')
             await quiz_storage.set_value(quiz_id, answers)
             await quiz_storage.async_save()
+
         else:
+            # If answers are already known, just re-submit them
             sync_options = self._default_sync_options(quiz_id)
             sync_options.update({'quiz': {'answers': [str(a) for a in answers]}})
             await self.client.sync_credential_value(sync_options, quiz=True)
             logger.success(f'{self.idx}) {quiz["name"]} answers restored and verified')
+
 
     async def _complete_survey(self, campaign_id, survey):
         survey_id = survey['id']
@@ -962,3 +1001,187 @@ class GalxeAccount:
                 node = edge['node']
                 space = node['space']
                 self.account.spaces_points[space['alias']] = (space['name'], node['points'], node['rank'])
+
+    async def is_user_already_subscribed(self) -> bool:
+        try:
+            return await self.client.get_user_plus_subscription()
+        except:
+            return False
+        
+    async def get_minimum_deposit_amounts(self) -> dict:
+        tokens = await self.client.get_instant_payment_task_minimum_deposit_amount()
+        return {token["chain"].lower(): int(token["amount"]) for token in tokens}
+
+    async def get_chain_eth_balances(self, chains: list[str]) -> dict:
+        balances = {}
+        for chain in chains:
+            async with OnchainAccount(self.account, chain) as onchain:
+                balances[chain] = await onchain.get_eth_balance()
+        return balances
+
+    def select_subscription_chain(self, balances, minimum_amounts) -> str | None:
+        for chain in ["base", "arbitrum", "ethereum"]:
+            if balances.get(chain, 0) >= minimum_amounts.get(chain, float('inf')):
+                return chain
+        return None
+
+    async def send_cross_chain_subscription_tx(self, chain: str, task_data: dict) -> str:
+        async with OnchainAccount(self.account, chain) as onchain:
+            return await onchain.subscript_galaxe_plus_cross_chain(
+                chain=chain,
+                user_address=self.account.evm_address,
+                deposit_token=task_data["depositToken"],
+                deposit_amount=task_data["depositAmount"],
+                task_id=task_data["taskId"],
+                task_fee=task_data["taskFee"],
+                target_endpoint_id=task_data["crossChainSwapDepositResponse"]["targetEndpointId"],
+                target_token=task_data["crossChainSwapDepositResponse"]["targetToken"],
+                source_swap=task_data["crossChainSwapDepositResponse"]["sourceSwap"],
+                target_swap=task_data["crossChainSwapDepositResponse"]["targetSwap"],
+                permit={
+                    "deadline": 0, "v": 0,
+                    "r": "0x" + "0" * 64,
+                    "s": "0x" + "0" * 64
+                },
+                native_drop=task_data["crossChainSwapDepositResponse"]["nativeDrop"],
+                message_fee=task_data["crossChainSwapDepositResponse"]["messageFee"],
+                signature=bytes.fromhex(task_data["signature"][2:]),
+            )
+
+    async def wait_for_payment_task_success(self, task_id: int, timeout=120, interval=5):
+        from asyncio import sleep
+        for _ in range(timeout // interval):
+            try:
+                if await self.client.payment_task_info(task_id) == "Success":
+                    return True
+            except:
+                pass
+            await sleep(interval)
+        raise Exception("Payment task not confirmed in time.")
+
+    async def confirm_subscription_participation(self, campaign, claim_data, tx_hash):
+        try:
+            await self.client.participate(
+                campaign['id'],
+                campaign['chain'],
+                claim_data['nonce'],
+                tx_hash,
+                claim_data['mintFuncInfo']['verifyIDs'][0]
+            )
+        except Exception as e:
+            await log_long_exc(self.idx, 'Claim confirmation in API failed', e, warning=True)
+
+
+    async def try_subscribe_galaxe_plus(self):
+        # 1. 是否已订阅
+        if await self.is_user_already_subscribed():
+            await log_long_exc(self.idx, 'User plus already subscribed')
+            return
+
+        # 2. 获取三链最低金额要求
+        minimum_amounts = await self.get_minimum_deposit_amounts()
+
+        # 3. 获取余额（ETH 主币）
+        balances = await self.get_chain_eth_balances(["base", "arbitrum", "ethereum"])
+
+        # 4. 确定合适链：base > arbitrum > ethereum
+        selected_chain = self.select_subscription_chain(balances, minimum_amounts)
+        if not selected_chain:
+            await log_long_exc(self.idx, 'Insufficient balance on all chains')
+            return
+
+        # 5. 前置检查
+        if 'Insufficient' != await self.client.ss_pre_check_plus():
+            await log_long_exc(self.idx, 'Pre-check monthly plus failed')
+            return
+        try:
+            # 6. 注册任务（获取 tx 参数）
+            task_data = await self.client.register_instant_payment_task(
+                minimum_amounts[selected_chain],
+                '0x0000000000000000000000000000000000000000',
+                selected_chain.upper()
+            )
+        except Exception as e:
+            await log_long_exc(self.idx, 'register_instant_payment_task failed', e, warning=True)
+            return
+
+        # 7. 构造并发送交易
+        tx_hash = await self.send_cross_chain_subscription_tx(
+            selected_chain, task_data
+        )
+
+        # 8. 查询任务状态确认完成
+        await self.wait_for_payment_task_success(task_data["taskId"])
+
+        # 9. 取消自动续费
+        await self.client.update_plus_user_config(False)
+
+        # 10. 通知 API 后台参与活动
+        #await self.confirm_subscription_participation(campaign, claim_data, tx_hash)
+
+    async def _wait_for_score_ready(self, timeout=180, interval=10):
+        from asyncio import sleep
+        for _ in range(timeout // interval):
+            info = await self.client.get_score_detail(self.account.evm_address)
+            if info["data"]["scoreData"]["scoreData"]:
+                logger.success(f"{self.idx}) Galaxy Web Score is now available!")
+                return
+            await sleep(interval)
+        raise Exception("Timeout: Score not generated within expected time.")
+
+    async def try_generate_galaxy_score(self):
+        # 1. 确认已订阅 PLUS
+        if not await self.is_user_already_subscribed():
+            await log_long_exc(self.idx, 'User not subscribed to PLUS, cannot mint Galaxy Web Score')
+            return
+
+        # 2. 前置检查
+        try:
+            if 'Insufficient' != await self.client.ss_pre_check_score():
+                await log_long_exc(self.idx, 'Pre-check mint web3 score failed')
+                return
+        except Exception as e:
+            await log_long_exc(self.idx, 'ss_pre_check_score failed', e, warning=True)
+            return
+
+        # 3. 注册任务（免费 mint score）
+        try:
+            result = await self.client.register_ss_payment_task()
+            task_id = result["taskId"]
+        except Exception as e:
+            await log_long_exc(self.idx, 'register_ss_payment_task failed', e, warning=True)
+            return
+
+        # 4. 等待任务状态完成
+        try:
+            await self.wait_for_payment_task_success(task_id)
+        except Exception as e:
+            await log_long_exc(self.idx, f'payment_task_info check failed for score task {task_id}', e, warning=True)
+
+    async def _complete_web3_score(self, campaign_id, credential):
+        logger.info(f"{self.idx}) Start to complete web3 score...")
+        # Step 1: Check if score already exists
+        score_info = await self.client.get_score_detail(self.account.evm_address)
+        score_exists = score_info.get("data", {}).get("scoreData") is not None
+
+        if score_exists:
+            logger.success(f"{self.idx}) Galaxy Web Score already exists")
+            return
+
+        # Step 2: If not subscribed, subscribe
+        subscribed = await self.is_user_already_subscribed()
+        if not subscribed:
+            logger.info(f"{self.idx}) Not subscribed to Galaxy PLUS, subscribing...")
+            await self.try_subscribe_galaxe_plus()
+            logger.info(f"{self.idx}) Subscription completed")
+
+        # Step 3: Mint score for free (requires PLUS subscription)
+        logger.info(f"{self.idx}) Subscribed, preparing to mint Web3 Score")
+        await self.try_generate_galaxy_score()
+
+        # Step 4: Wait until scoreData is generated
+        logger.info(f"{self.idx}) Waiting for Galaxy Web Score to be generated...")
+        await self._wait_for_score_ready()
+
+        await self.add_typed_credential(campaign_id, credential)
+
